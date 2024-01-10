@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "nxutils"
+version = "0.1.0"
+description = ""
+authors = ["Keith W. Davis <kwdprof@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<4.0"
+numpy = "^1.26.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
