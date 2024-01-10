@@ -105,8 +105,8 @@ def graph_to_traces(g, **kwargs):
     return traces
 
 
-def diGraph_to_richTree(g, branch=None, seen=None, attr="name", depth=0):
-    """ Take a digraph with parents pointing to children and return a Tree. 
+def diGraph_to_richTree(g, branch=None, seen=None, attr=["name"], depth=0):
+    """ Take a digraph with parents pointing to children and return a Tree.
 
     This was really hard to figure out.
 
@@ -116,7 +116,7 @@ def diGraph_to_richTree(g, branch=None, seen=None, attr="name", depth=0):
     seen:   A set of nodes that have alreayd been added to the Tree.
             Prevents duplication of nodes since DiGraphs have references
             to nodes at top level and when they are pointed to.
-    attr:   A string identifying the data attribute containing the string to 
+    attr:   A string identifying the data attribute containing the string to
             add to the tree. Set to `None` to add node. None option
             will fail if str(node) fails.
     depth:  Only usefull for debugging recursion.
@@ -133,7 +133,34 @@ def diGraph_to_richTree(g, branch=None, seen=None, attr="name", depth=0):
             if attr is None:
                 newbranch = Tree(str(g.nodes[n]))
             else:
-                newbranch = Tree(g.nodes.data()[n][attr])
+                for key in attr:
+                    try:
+                        newbranch = Tree(g.nodes.data()[n][key])
+                    except KeyError as e:
+                        pass
+                try:
+                    newbranch
+                except NameError:
+                    raise KeyError(f"Key {attr} not in node {n}") from e
             branch.add(diGraph_to_richTree(g.subgraph(
                 g.succ[n]), newbranch, seen, attr, depth+1))
     return branch
+
+
+def obj_to_graph(obj, attrlist=["parent_id", "project_id"], g=None):
+    """ Accepts an iterable and makes a graph 
+    if g is None:
+        g = nx.DiGraph()
+    ndicts = {}
+    for n in obj:
+        nd = asdict(n)
+        nd["obj"] = n
+        ndicts[n.id] = nd
+    for attr in attrlist:
+        try:
+            edges = [(n.id, getattr(n, attr)) for n in obj if getattr(n, attr) is not None] 
+        except AttributeError as e:
+            pass
+    g.add_nodes_from(ndicts.items())
+    g.add_edges_from(edges)
+    return g
