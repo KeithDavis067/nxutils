@@ -146,34 +146,3 @@ def diGraph_to_richTree(g, branch=None, seen=None, attr=["name"], depth=0):
             branch.add(diGraph_to_richTree(g.subgraph(
                 g.succ[n]), newbranch, seen, attr, depth+1))
     return branch
-
-
-def tdobj_to_node(tdobj, parent_attr_list=["parent_id", "project_id"]):
-    """ Return a dict and edges suitable for adding to a graph."""
-    nd = asdict(obj)
-    edges = {}
-    for attr in parent_attr_list:
-        try:
-            edges[attr] = (tdobj.id, getattr(obj, attr))
-        except AttributeError:
-            pass
-    return nd, edges
-
-
-def tditer_to_graph(tditer, parent_attr_list=["parent_id", "project_id"], g=None):
-    """ Accepts an iterable and makes a graph"""
-    if g is None:
-        g = nx.DiGraph()
-    ndicts = {}
-    for obj in tditer:
-        nd, edges = tdobj_to_node(obj, parent_attr_list=parent_attr_list)
-    # Tasks ahave a
-    for attr in attrlist:
-        try:
-            edges = [(n.id, getattr(n, attr))
-                     for n in obj if getattr(n, attr) is not None]
-        except AttributeError as e:
-            pass
-    g.add_nodes_from(ndicts.items())
-    g.add_edges_from(edges)
-    return g
