@@ -136,19 +136,19 @@ def diGraph_to_richTree(g, branch=None, seen=None, attr=["name"], depth=0):
                 for key in attr:
                     try:
                         newbranch = Tree(g.nodes.data()[n][key])
-                    except KeyError as e:
+                    except KeyError:
                         pass
                 try:
                     newbranch
                 except NameError:
-                    raise KeyError(f"Key {attr} not in node {n}") from e
+                    raise KeyError(f"Key {attr} not in node {n}")
             branch.add(diGraph_to_richTree(g.subgraph(
                 g.succ[n]), newbranch, seen, attr, depth+1))
     return branch
 
 
 def obj_to_graph(obj, attrlist=["parent_id", "project_id"], g=None):
-    """ Accepts an iterable and makes a graph 
+    """ Accepts an iterable and makes a graph """
     if g is None:
         g = nx.DiGraph()
     ndicts = {}
@@ -158,8 +158,9 @@ def obj_to_graph(obj, attrlist=["parent_id", "project_id"], g=None):
         ndicts[n.id] = nd
     for attr in attrlist:
         try:
-            edges = [(n.id, getattr(n, attr)) for n in obj if getattr(n, attr) is not None] 
-        except AttributeError as e:
+            edges = [(n.id, getattr(n, attr))
+                     for n in obj if getattr(n, attr) is not None]
+        except AttributeError:
             pass
     g.add_nodes_from(ndicts.items())
     g.add_edges_from(edges)
