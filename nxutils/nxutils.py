@@ -136,13 +136,18 @@ def diGraph_to_richTree(g, branch=None, seen=None, attr=["name"], depth=0):
             else:
                 for key in attr:
                     try:
-                        newbranch = Tree(g.nodes.data()[n][key])
-                    except KeyError as e:
-                        pass
+                        newbranch = Tree(getattr(g.nodes[n], key))
+                    except AttributeError:
+                        try:
+                            newbranch = Tree(getattr(g.nodes[n]["obj"], key))
+                        except AttributeError:
+                            pass
                 try:
                     newbranch
                 except NameError:
-                    raise KeyError(f"Key {attr} not in node {n}") from e
+                    raise KeyError(
+                        f"Key {attr} not in node {n} or in obj attr on node, "
+                        "or no obj attr on node.")
             branch.add(diGraph_to_richTree(g.subgraph(
                 g.succ[n]), newbranch, seen, attr, depth+1))
     return branch
