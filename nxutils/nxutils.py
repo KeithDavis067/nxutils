@@ -106,7 +106,7 @@ def graph_to_traces(g, **kwargs):
     return traces
 
 
-def diGraph_to_richTree(g, branch=None, seen=None, attr=["name"], depth=0):
+def diGraph_to_richTree(g, branch=None, seen=None, attr=["name", "content"], depth=0):
     """ Take a digraph with parents pointing to children and return a Tree.
 
     This was really hard to figure out.
@@ -146,7 +146,7 @@ def diGraph_to_richTree(g, branch=None, seen=None, attr=["name"], depth=0):
                     newbranch
                 except NameError:
                     raise KeyError(
-                        f"Key {attr} not in node {n} or in obj attr on node, "
+                        f"Key {attr} not in node {'n'} or in obj attr on node, "
                         "or no obj attr on node.")
             branch.add(diGraph_to_richTree(g.subgraph(
                 g.succ[n]), newbranch, seen, attr, depth+1))
