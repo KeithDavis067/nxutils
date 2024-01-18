@@ -10,7 +10,8 @@ __all__ = ["edge_pos",
            "edge_array_separated",
            "graph_to_plottable",
            "graph_to_traces",
-           "diGraph_to_richTree"]
+           "diGraph_to_richTree",
+           "obj_to_node_and_edges"]
 
 
 def edge_pos(edges, pos):
@@ -106,7 +107,82 @@ def graph_to_traces(g, **kwargs):
     return traces
 
 
-def diGraph_to_richTree(g, branch=None, seen=None, attr=["name"], depth=0):
+def obj_to_node_and_edges(obj, node_attr,
+                          parent_attr_list=["parent_id",
+                                            "project_id",
+                                            "section_id"],
+                          edge_attr=None,
+                          edge_attr_func=None):
+    """ Return a node and edges suitable for adding to a graph.
+
+    tdobj: an todoist object, or an object with an `id` attribute
+        suitable as a nx.DiGraph node
+        holding a node id to point to.
+    node_attr: attribute to use as node. Set explicitly to `None` to use
+        obj as node. Nodes must follow `nx.Graph` rules such as hashability.
+    parent_attr_list: list of object attributes to use as edge endpoints.
+        If none of the listed attributes exist, no edge is added.
+    edge_attr: A list or dict of attributes on `obj` to assign as data on the edge.
+        Set edge_attr to `False` (must be the False object) to ignore edge_attr_func.
+    edge_attr_func: A function that accepts only the object and returns a dict
+        of edge attributes names and values. Will `update` any dict created by `edge_attr`
+        and therefore override any values of the same key.
+
+    Returns:
+        A tuple of the id and data suitable for adding to a graph, and a
+        dict mapping `parent_attr_list` to the edge data. The function adding
+        the returned to a DiGraph should create a list of edges from the edge dict.
+    """
+    if node_attr is None:
+        node = obj
+    else:
+        node = getattr(obj, node_attr)
+    # TODO: change this to returning a proper 3-tuple of (u, v, data).
+    # If caller needs to filter on data they can do so.
+    edges = {}
+    for attr in parent_attr_list:
+        try:
+            # Parent ID may be None, not a valid edge.
+            if getattr(obj, attr) is not None:
+                if edge_attr is not False:
+                    edges[attr] = (node, getattr(obj, attr))
+                    # Only add edge attributes if there is a valid edge.
+                    # Allow list or dict.
+                    try:
+                        eattr_items = edge_attr.items()
+                    except TypeError:
+                        eattr_items = zip(edge_attr, edge_attr)
+                    for eattr_name, eattr in eattr_items:
+                        try:
+                            edges[attr] = (*edges[attr],
+                                           {edge_attr: getattr(obj, edge_attr)}
+                                           )
+                        # If edge_attr is None, catch the typeerror and continue.
+                        # Let the error happen if the attribute doesn't exist.
+                        except TypeError:
+                            pass
+                    # Try edge_attr_func.
+                    try:
+                        try:
+                            u, v, data = edges[attr]
+                            # edge_attr_func must return a dict.
+                            data.update(edge_attr_func(obj))
+                            edges[attr] = (u, v, data)
+                        # If no attributes have been added, data will be the
+                        # node the edge points to.
+                        except TypeError:
+                            edges[attr] = (*edges[attr], edge_attr_func(obj))
+                    # If edge_func is None, catch the typeerror and continue.
+                    # Let the error happen if the attribute doesn't exist.
+                    except TypeError:
+                        pass
+        except AttributeError:
+            pass
+
+    return (node, dict(obj=obj)), edges
+
+
+def diGraph_to_richTree(g, branch=None, seen=None, attr=["name", "content"], depth=0):
     """ Take a digraph with parents pointing to children and return a Tree.
 
     This was really hard to figure out.
@@ -146,7 +222,7 @@ def diGraph_to_richTree(g, branch=None, seen=None, attr=["name"], depth=0):
                     newbranch
                 except NameError:
                     raise KeyError(
-                        f"Key {attr} not in node {n} or in obj attr on node, "
+                        f"Key {attr} not in node {'n'} or in obj attr on node, "
                         "or no obj attr on node.")
             branch.add(diGraph_to_richTree(g.subgraph(
                 g.succ[n]), newbranch, seen, attr, depth+1))
