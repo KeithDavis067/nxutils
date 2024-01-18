@@ -7,4 +7,5 @@ __all__ = ["edge_pos",
            "edge_array_separated",
            "graph_to_plottable",
            "graph_to_traces",
-           "diGraph_to_richTree"]
+           "diGraph_to_richTree",
+           "obj_to_node_and_edges"]
