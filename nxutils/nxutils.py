@@ -139,13 +139,13 @@ def obj_to_node_and_edges(obj, node_attr,
         node = getattr(obj, node_attr)
     # TODO: change this to returning a proper 3-tuple of (u, v, data).
     # If caller needs to filter on data they can do so.
-    edges = {}
+    edgebunch = []
     for attr in parent_attr_list:
         try:
             # Parent ID may be None, not a valid edge.
             if getattr(obj, attr) is not None:
                 if edge_attr is not False:
-                    edges[attr] = (node, getattr(obj, attr))
+                    edgebunch.append((node, getattr(obj, attr)))
                     # Only add edge attributes if there is a valid edge.
                     # Allow list or dict.
                     try:
