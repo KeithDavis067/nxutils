@@ -138,45 +138,41 @@ def obj_to_node_and_edges(obj, node_attr,
         node = obj
     else:
         node = getattr(obj, node_attr)
-    # TODO: change this to returning a proper 3-tuple of (u, v, data).
-    # If caller needs to filter on data they can do so.
-    #
     # Each `parent_attr` may add an edge.
     edgebunch = []
     for parent_attr in parent_attr_list:
-        try:  # Skip if parent attr doesn't exist.
-            # Parent ID may be None, skip because that's not a validdedge.
-            if getattr(obj, parent_attr) is not None:
-                edge = (node, getattr(obj, parent_attr))
-                if edge_attr is not False:
+        try:
+            parent = getattr(obj, parent_attr)
+        except AttributeError:
+            continue  # Skip if attribute doesn't exist.
+
+        if parent is not None:  # Skip: [u][None] isn't an edge.
+            edge = (node, parent)
+            if edge_attr is not False:  # Add no edge data if edge_attr False.
+                if edge_attr is not None:
                     # Allow list or dict.
                     try:
                         eattr_items = edge_attr.items()
-                    except TypeError:
+                    except AttributeError:
                         eattr_items = zip(edge_attr, edge_attr)
-
                     for eattr_name, eattr in eattr_items:
-                        try:
+                        eattr = getattr(obj, eattr)
+                        # Don't set None, but don't raise error.
+                        if eattr is not None:
                             edge = (*edge, {eattr_name: getattr(obj, eattr)})
-                        # If eattr_name is None, catch the typeerror and continue.
-                        # Let the error happen if the attribute doesn't exist.
-                        except TypeError:
-                            pass
 
-                    try:   # add edge_attr_func result.
-                        try:
-                            u, v, data = edge
-                        except TypeError:
-                            u, v = edge
-                        # edge_attr_func must return a dict.
+                if edge_attr_func is not None:
+                    try:
+                        u, v, data = edge
+                    except ValueError:
+                        u, v = edge
+                    # edge_attr_func must return a dict.
+                    try:
                         data.update(edge_attr_func(obj))
-                        edge = (u, v, data)
-                    # If edge_func is None, catch the typeerror and continue.
-                    # Let the error happen if the attribute doesn't exist.
-                    except TypeError:
-                        pass
-        except AttributeError:
-            pass
+                    except (NameError, UnboundLocalError):
+                        data = edge_attr_func(obj)
+
+                    edge = (u, v, data)
         try:
             edgebunch.append(edge)
         except NameError:
@@ -188,7 +184,7 @@ def obj_to_node_and_edges(obj, node_attr,
 def diGraph_to_richTree(g, branch=None,
                         seen=None,
                         attr=["name", "content"],
-                        filter=None, depth=0):
+                        depth=0):
     """ Take a digraph with parents pointing to children and return a Tree.
 
     This was really hard to figure out.
@@ -209,23 +205,19 @@ def diGraph_to_richTree(g, branch=None,
     if seen is None:
         seen = set()
 
-    if filter_node:
-        localg = nx.subgraph_view(
-
-
     for n in g:
         if n not in seen:
             # print("\t" * depth, n, g.nodes.data()[n]["name"])
             seen.add(n)
             if attr is None:
-                newbranch=Tree(str(g.nodes[n]))
+                newbranch = Tree(str(g.nodes[n]))
             else:
                 for key in attr:
                     try:
-                        newbranch=Tree(getattr(g.nodes[n], key))
+                        newbranch = Tree(getattr(g.nodes[n], key))
                     except AttributeError:
                         try:
-                            newbranch=Tree(getattr(g.nodes[n]["obj"], key))
+                            newbranch = Tree(getattr(g.nodes[n]["obj"], key))
                         except AttributeError:
                             pass
                 try:
@@ -237,3 +229,22 @@ def diGraph_to_richTree(g, branch=None,
             branch.add(diGraph_to_richTree(g.subgraph(
                 g.succ[n]), newbranch, seen, attr, depth+1))
     return branch
+
+
+def filter_factory(G, attr, value):
+    def filter(node):
+        try:
+            if G.nodes[node][attr] == value:
+                return True
+            else:
+                return False
+        except KeyError:
+            try:
+                if getattr(G.nodes[node], attr) == Value:
+                    return True
+                else:
+                    return False
+            except AttributeError:
+                return False
+        return False
+    return filter
