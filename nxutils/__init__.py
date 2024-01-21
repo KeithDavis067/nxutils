@@ -3,9 +3,12 @@ from .nxutils import *
 
 __all__ = ["edge_pos",
            "edge_pos_to_array",
-           "graph_to_edge_array",
-           "edge_array_separated",
-           "graph_to_plottable",
-           "graph_to_traces",
+           "separate_edges",
+           "edge_sep_to_mid_data",
+           "g_to_edge_array",
+           "g_to_plot_arrays",
+           "g_to_traces",
+           "obj_to_node_and_edges",
            "diGraph_to_richTree",
-           "obj_to_node_and_edges"]
+           "filter_factory"
+           ]

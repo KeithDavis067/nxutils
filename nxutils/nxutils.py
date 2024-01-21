@@ -6,16 +6,19 @@ from rich.tree import Tree
 
 __all__ = ["edge_pos",
            "edge_pos_to_array",
-           "graph_to_edge_array",
-           "edge_array_separated",
-           "graph_to_plottable",
-           "graph_to_traces",
+           "separate_edges",
+           "edge_sep_to_mid_data",
+           "g_to_edge_array",
+           "g_to_plot_arrays",
+           "g_to_traces",
+           "obj_to_node_and_edges",
            "diGraph_to_richTree",
-           "obj_to_node_and_edges"]
+           "filter_factory"
+           ]
 
 
 def edge_pos(edges, pos):
-    """ Return a dict of edge endpoints from an iterable of edges and dict of node positions. """
+    """ Return edge endpoints analogous to `pos` from nx.layout funcs."""
     edge_pos = [(edge, (pos[edge[0]], pos[edge[1]])) for edge in edges]
     return dict(edge_pos)
 
@@ -31,14 +34,23 @@ def edge_pos_to_array(edge_pos):
     return np.array(a)
 
 
+def separate_edges(edge_arr):
+    """ Return array with nan between each edge.
+
+    This makes plotting edges as a single trace in plotly easier.
+    """
+    return np.insert(edge_arr, slice(2, -1, 2), np.full(2, np.nan), axis=0)
+
+
 def edge_sep_to_mid_data(g, edge_sep):
+    """ Return positions of edge halfway point and edge direction."""
     mid_pos = edge_sep[0::3]/2 + edge_sep[1::3]/2
     mid_vector = edge_sep[1::3] - edge_sep[0::3]
     mid_angle = np.arctan2(mid_vector[:, 0], mid_vector[:, 1]) * (180 / np.pi)
     return (mid_pos, mid_angle)
 
 
-def graph_to_edge_array(g, layout_func=None):
+def g_to_edge_array(g, layout_func=None):
     """ Return an array of edge endpoints from a graph. """
     if layout_func is None:
         try:
@@ -49,12 +61,7 @@ def graph_to_edge_array(g, layout_func=None):
     return edge_pos_to_array(edge_pos(g.edges(), layout_func(g)))
 
 
-def edge_array_separated(edge_arr):
-    """ Return array with nan between each edge. """
-    return np.insert(edge_arr, slice(2, -1, 2), np.full(2, np.nan), axis=0)
-
-
-def graph_to_plottable(g, layout_func=None):
+def g_to_plot_arrays(g, layout_func=None):
     if layout_func is None:
         try:
             layout_func = g.layout_func
@@ -65,7 +72,7 @@ def graph_to_plottable(g, layout_func=None):
                 layout_func = nx.spring_layout
 
     pos = layout_func(g)
-    edge_sep = edge_array_separated(edge_pos_to_array(edge_pos(g.edges, pos)))
+    edge_sep = separate_edges(edge_pos_to_array(edge_pos(g.edges, pos)))
     if g.is_directed():
         mid_data = edge_sep_to_mid_data(g, edge_sep)
     else:
@@ -75,58 +82,57 @@ def graph_to_plottable(g, layout_func=None):
             mid_data)
 
 
-def graph_to_traces(g, **kwargs):
-    try:
-        trace_names = kwargs["trace_names"]
-        if not g.is_directed() and "arrows" in trace_names:
-            raise TypeError("Cannot plot directed arrows if G is undirected."
-                            " Unset 'arrows' in 'trace_names'")
-    except KeyError:
-        trace_names = ["edges", "nodes"]
-        if g.is_directed():
-            trace_names.append("arrows")
+def g_to_traces(g, trace_kwargs={}, layout_func=None):
+    trace_defaults = {
+        "nodes": {"name": "nodes",
+                  "mode": "markers",
+                  },
+        "edges": {"name": "edges",
+                  "mode": "lines",
+                  },
+        "arrows": {"name": "arrows",
+                   "mode": "lines",
+                   "marker": {"size": 12},
+                   "symbol": "arrow-wide",
+                   "color": "green",
+                   }
+    }
 
-    trace_kwargs = {}
-    for name in trace_names:
-        # Does nothing but lets us pass below without catching keyerror.
-        trace_kwargs[name] = {}
-        for kwarg in kwargs:
-            if kwarg.startswith(name):
-                kwargs = {kwarg.split(name)[1]: kwargs[kwarg]}
-                trace_kwargs[name] = kwargs
+    # If arrows is explicitly set, let user know that doesn't
+    # make sense.
+    if "arrows" in trace_kwargs and not g.is_directed():
+        raise TypeError("Cannot plot directed arrows if g is undirected. "
+                        "Remove `arrows` from trace_kwargs.")
 
-    try:
-        pos, e_pos, mid_data = graph_to_plottable(
-            g, layout_func=kwargs["layout_func"])
-    except KeyError:
-        pos, e_pos, mid_data = graph_to_plottable(g)
+    # This is a little weird, but it doesn't overwrite parameter
+    # kwargs with defaults, and keeps the "trace_kwargs".
+    kw = trace_defaults
+    if not g.is_directed():
+        del kw["arrows"]
+    kw.update(trace_kwargs)
+    trace_kwargs = kw
+
+    # g_to_plot_arrays will handle layout_func if None.
+    pos, e_pos, mid_data = g_to_plot_arrays(g, layout_func=layout_func)
 
     traces = {}
     if "nodes" in trace_names:
         traces["nodes"] = go.Scatter(
             x=pos[:, 0], y=pos[:, 1],
-            name="nodes",
-            mode="markers",
             **trace_kwargs["nodes"])
 
     if "edges" in trace_names:
         traces["edges"] = go.Scatter(
             x=e_pos[:, 0], y=e_pos[:, 1],
-            name="edges",
-            mode="lines",
             **trace_kwargs["edges"])
 
     if "arrows" in trace_names:
         mid_pos, mid_angle = mid_data
         traces["arrows"] = go.Scattergl(
             x=mid_pos[:, 0], y=mid_pos[:, 1],
-            mode="markers",
-            marker=dict(size=12,
-                        symbol="arrow-wide",
-                        angle=mid_angle,
-                        color="green",
-                        ),
-            name="arrows")
+            angle=mid_angle,
+            **trace_kwargs["arrows"],
+        )
 
     return traces
 
@@ -205,7 +211,7 @@ def obj_to_node_and_edges(obj, node_attr,
     return (node, dict(obj=obj)), edgebunch
 
 
-def diGraph_to_richTree(g, n=None, label_func=None):
+def diGraph_to_richTree(g, n=None, label_func=None, root_label=None):
     """ Take a digraph with parents pointing to children and return a Tree.
 
     This was really hard to figure out.
@@ -222,19 +228,27 @@ def diGraph_to_richTree(g, n=None, label_func=None):
     Returns:
         a `Rich.Tree`
     """
-
     if label_func is None:
         def label_func(g, n):
             return str(n)
 
+    if root_label is None:
+        try:
+            root_label = g.name
+        except AttributeError:
+            root_label = "Root"
+
+    # Top level might be a forest.
     if n is None:
-        n = list(g.nodes)[0]
+        nbrs = [node for node in g if len(g.pred[node]) == 0]
+        tree = Tree(root_label)
+    else:
+        nbrs = g.adj[n]
+        tree = Tree(label_func(g, n))
 
-    tree = Tree(label_func(g, n))
-
-    for nb in g.adj[n]:
+    for nb in nbrs:
         if len(g.adj[nb]) > 0:
-            tree.add(diGraph_to_richTree(g, nb))
+            tree.add(diGraph_to_richTree(g, nb, label_func))
         else:
             tree.add(label_func(g, nb))
     return tree
