@@ -31,6 +31,13 @@ def edge_pos_to_array(edge_pos):
     return np.array(a)
 
 
+def edge_sep_to_mid_data(g, edge_sep):
+    mid_pos = edge_sep[0::3]/2 + edge_sep[1::3]/2
+    mid_vector = edge_sep[1::3] - edge_sep[0::3]
+    mid_angle = np.arctan2(mid_vector[:, 0], mid_vector[:, 1]) * (180 / np.pi)
+    return (mid_pos, mid_angle)
+
+
 def graph_to_edge_array(g, layout_func=None):
     """ Return an array of edge endpoints from a graph. """
     if layout_func is None:
@@ -39,7 +46,7 @@ def graph_to_edge_array(g, layout_func=None):
         except AttributeError:
             layout_func = nx.planar_layout
 
-    return edge_pos_as_array(edge_pos(g.edges(), layout_func(g)))
+    return edge_pos_to_array(edge_pos(g.edges(), layout_func(g)))
 
 
 def edge_array_separated(edge_arr):
@@ -58,10 +65,14 @@ def graph_to_plottable(g, layout_func=None):
                 layout_func = nx.spring_layout
 
     pos = layout_func(g)
-    e_pos_array = edge_array_separated(
-        edge_pos_to_array(edge_pos(g.edges(), pos)))
+    edge_sep = edge_array_separated(edge_pos_to_array(edge_pos(g.edges, pos)))
+    if g.is_directed():
+        mid_data = edge_sep_to_mid_data(g, edge_sep)
+    else:
+        mid_data = None
     return (np.array(list(pos.values())),
-            e_pos_array)
+            edge_sep,
+            mid_data)
 
 
 def graph_to_traces(g, **kwargs):
@@ -85,9 +96,10 @@ def graph_to_traces(g, **kwargs):
                 trace_kwargs[name] = kwargs
 
     try:
-        pos, e_pos = graph_to_plottable(g, layout_func=kwargs["layout_func"])
+        pos, e_pos, mid_data = graph_to_plottable(
+            g, layout_func=kwargs["layout_func"])
     except KeyError:
-        pos, e_pos = graph_to_plottable(g)
+        pos, e_pos, mid_data = graph_to_plottable(g)
 
     traces = {}
     if "nodes" in trace_names:
@@ -103,6 +115,18 @@ def graph_to_traces(g, **kwargs):
             name="edges",
             mode="lines",
             **trace_kwargs["edges"])
+
+    if "arrows" in trace_names:
+        mid_pos, mid_angle = mid_data
+        traces["arrows"] = go.Scattergl(
+            x=mid_pos[:, 0], y=mid_pos[:, 1],
+            mode="markers",
+            marker=dict(size=12,
+                        symbol="arrow-wide",
+                        angle=mid_angle,
+                        color="green",
+                        ),
+            name="arrows")
 
     return traces
 
@@ -181,54 +205,39 @@ def obj_to_node_and_edges(obj, node_attr,
     return (node, dict(obj=obj)), edgebunch
 
 
-def diGraph_to_richTree(g, branch=None,
-                        seen=None,
-                        attr=["name", "content"],
-                        depth=0):
+def diGraph_to_richTree(g, n=None, label_func=None):
     """ Take a digraph with parents pointing to children and return a Tree.
 
     This was really hard to figure out.
+    Recursively walk a graph and return a Rich.Tree
+    of the hierarchy.
 
-    g: The graph to map.
-    branch: A reference to the branch of the Tree to add nodes to.
-            Usually used internally during recursion.
-    seen:   A set of nodes that have alreayd been added to the Tree.
-            Prevents duplication of nodes since DiGraphs have references
-            to nodes at top level and when they are pointed to.
-    attr:   A string identifying the data attribute containing the string to
-            add to the tree. Set to `None` to add node. None option
-            will fail if str(node) fails.
-    depth:  Only usefull for debugging recursion.
+    g: The graph to walk.
+    n: The first node in the walk. If `None` self to the first node
+        returned by `list(g.nodes)[0].`
+    label_func: A function that takes a graph and a node and returns
+        a string used as the label for that node in the `Rich.Tree`.
+        If `None`, try to convert node to a string and use as the label.
+
+    Returns:
+        a `Rich.Tree`
     """
-    if branch is None:
-        branch = Tree(g.graph["name"])
-    if seen is None:
-        seen = set()
 
-    for n in g:
-        if n not in seen:
-            # print("\t" * depth, n, g.nodes.data()[n]["name"])
-            seen.add(n)
-            if attr is None:
-                newbranch = Tree(str(g.nodes[n]))
-            else:
-                for key in attr:
-                    try:
-                        newbranch = Tree(getattr(g.nodes[n], key))
-                    except AttributeError:
-                        try:
-                            newbranch = Tree(getattr(g.nodes[n]["obj"], key))
-                        except AttributeError:
-                            pass
-                try:
-                    newbranch
-                except NameError:
-                    raise KeyError(
-                        f"Key {attr} not in node {'n'} or in obj attr on node, "
-                        "or no obj attr on node.")
-            branch.add(diGraph_to_richTree(g.subgraph(
-                g.succ[n]), newbranch, seen, attr, depth+1))
-    return branch
+    if label_func is None:
+        def label_func(g, n):
+            return str(n)
+
+    if n is None:
+        n = list(g.nodes)[0]
+
+    tree = Tree(label_func(g, n))
+
+    for nb in g.adj[n]:
+        if len(g.adj[nb]) > 0:
+            tree.add(diGraph_to_richTree(g, nb))
+        else:
+            tree.add(label_func(g, nb))
+    return tree
 
 
 def filter_factory(G, attr, value):
@@ -240,7 +249,7 @@ def filter_factory(G, attr, value):
                 return False
         except KeyError:
             try:
-                if getattr(G.nodes[node], attr) == Value:
+                if getattr(G.nodes[node], attr) == value:
                     return True
                 else:
                     return False
