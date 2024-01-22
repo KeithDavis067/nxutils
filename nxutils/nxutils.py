@@ -91,10 +91,10 @@ def g_to_traces(g, trace_kwargs={}, layout_func=None):
                   "mode": "lines",
                   },
         "arrows": {"name": "arrows",
-                   "mode": "lines",
-                   "marker": {"size": 12},
-                   "symbol": "arrow-wide",
-                   "color": "green",
+                   "mode": "markers",
+                   "marker": {"size": 12,
+                              "symbol": "arrow-wide",
+                              "color": "green"},
                    }
     }
 
@@ -116,21 +116,22 @@ def g_to_traces(g, trace_kwargs={}, layout_func=None):
     pos, e_pos, mid_data = g_to_plot_arrays(g, layout_func=layout_func)
 
     traces = {}
-    if "nodes" in trace_names:
+    if "nodes" in trace_kwargs:
         traces["nodes"] = go.Scatter(
             x=pos[:, 0], y=pos[:, 1],
             **trace_kwargs["nodes"])
 
-    if "edges" in trace_names:
+    if "edges" in trace_kwargs:
         traces["edges"] = go.Scatter(
             x=e_pos[:, 0], y=e_pos[:, 1],
             **trace_kwargs["edges"])
 
-    if "arrows" in trace_names:
+    if "arrows" in trace_kwargs:
         mid_pos, mid_angle = mid_data
+        if "angle" not in trace_kwargs["arrows"]["marker"]:
+            trace_kwargs["arrows"]["marker"].update({"angle": mid_angle})
         traces["arrows"] = go.Scattergl(
             x=mid_pos[:, 0], y=mid_pos[:, 1],
-            angle=mid_angle,
             **trace_kwargs["arrows"],
         )
 
